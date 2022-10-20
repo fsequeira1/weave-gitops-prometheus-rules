@@ -1,0 +1,121 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    app: kube-prometheus-stack
+    release: prometheus
+  name: alertmanager-flux
+  namespace: flux-system
+spec:
+  groups:
+  - name: alerts.flux
+    rules:
+      # flux controller is down
+    - alert: HelmControllerMissing
+      annotations:
+        message: Flux pod is missing. Deployments may not work!
+      for: 0m
+      expr: absent(up{namespace="flux-system",pod=~"helm-controller-.*"})
+      labels:
+        severity: warning
+    - alert: NotificationControllerMissing
+      annotations:
+        message: Flux pod is missing. Deployments may not work!
+      for: 0m
+      expr: absent(up{namespace="flux-system",pod=~"notification-controller-.*"})
+      labels:
+        severity: warning
+    - alert: SourceControllerMissing
+      annotations:
+        message: Flux pod is missing. Deployments may not work!
+      for: 0m
+      expr: absent(up{namespace="flux-system",pod=~"source-controller-.*"})
+      labels:
+        severity: warning
+    - alert: KustomizeControllerMissing
+      annotations:
+        message: Flux pod is missing. Deployments may not work!
+      for: 0m
+      expr: absent(up{namespace="flux-system",pod=~"kustomize-controller-.*"})
+      labels:
+        severity: warning
+    - alert: ImageControllerMissing
+      annotations:
+        message: Flux pod is missing. Deployments' images may not be updated!
+      for: 0m
+      expr: absent(up{namespace="flux-system",pod=~"image-controller-.*"})
+      labels:
+        severity: info
+      # memory usage
+    - alert: FluxContainersMemoryUsage
+      expr: (sum(container_memory_working_set_bytes{name!="",namespace="flux-system",pod=~"source-.*|helm-.*|kustomize-.*|notification-.*|image-.*"}) BY (pod, container) / sum(container_spec_memory_limit_bytes > 0) BY (pod, container) * 100) > 80
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: Container Memory usage (instance {{ $labels.pod }})
+        description: "Container Memory usage is above 80%\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+    - alert: FluxContainersMemoryUsageAbove1GB
+      expr: container_memory_working_set_bytes{image!="",container!="",namespace="flux-system",pod=~"flux.*|source.*|helm.*|kustomize.*|notification-*|image-.*"} / 1000000 > 1000
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: Flux's Container Memory usage above 1GB (instance {{ $labels.pod }})
+        description: "Container Memory usage is above 1GB\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+    # Failing releases
+    - alert: FluxReconcilingErrors
+      annotations:
+      for: 5m
+      expr: sum(gotk_reconcile_condition{namespace=~"flux-system",exported_namespace=~"flux-system",type="Ready",status="False",kind=~"Kustomization|HelmRelease"}) > 0
+      labels:
+        severity: warning
+    # failing sources
+    - alert: FluxSyncErrors
+      annotations:
+        message: Errors count `{{ $value }}`. Please check the Weave GitOps UI
+      for: 5m
+      expr: sum(gotk_reconcile_condition{namespace=~"flux-system",exported_namespace=~"flux-system",type="Ready",status="False",kind=~"GitRepository|HelmRepository|Bucket"}) > 0
+      labels:
+        severity: warning
+
+    # failing sources
+    - alert: FluxReleasesReconciliationOver2s
+      annotations:
+        message: Errors count `{{ $value }}`. Please check the Weave GitOps UI
+      for: 5m
+      expr: |
+        sum(rate(gotk_reconcile_duration_seconds_sum{namespace=~"flux-system",exported_namespace=~"flux-system",kind=~"Kustomization|HelmRelease"}[5m])) by (kind)
+        /
+        sum(rate(gotk_reconcile_duration_seconds_count{namespace=~"flux-system",exported_namespace=~"flux-system",kind=~"Kustomization|HelmRelease"}[5m])) by (kind)
+        > 2
+      labels:
+        severity: warning
+
+    - alert: FluxSourceReconciliationOver30s
+      annotations:
+        message: Errors count `{{ $value }}`. Please check the Weave GitOps UI
+      for: 5m
+      expr: |
+        sum(rate(gotk_reconcile_duration_seconds_sum{namespace=~"flux-system",exported_namespace=~"flux-system",kind=~"GitRepository|HelmRepository|Bucket"}[5m])) by (kind)
+        /
+        sum(rate(gotk_reconcile_duration_seconds_count{namespace=~"flux-system",exported_namespace=~"flux-system",kind=~"GitRepository|HelmRepository|Bucket"}[5m])) by (kind)
+        > 30
+      labels:
+        severity: warning
+
+    - alert: FluxSourceNotReadyFor5m
+      annotations:
+        message: Errors count `{{ $value }}`. Please check the Weave GitOps UI
+      for: 5m
+      expr: gotk_reconcile_condition{namespace=~"flux-system",exported_namespace=~"flux-system",type!="Ready",status="False",kind=~"GitRepository|HelmRepository|Bucket"}
+      labels:
+        severity: warning
+
+    - alert: FluxReleasesNotReadyFor5m
+      annotations:
+        message: Errors count `{{ $value }}`. Please check the Weave GitOps UI
+      for: 5m
+      expr: gotk_reconcile_condition{namespace=~"flux-system",exported_namespace=~"flux-system",type!="Ready",status="False",kind=~"Kustomization|HelmRelease"}
+      labels:
+        severity: warning
