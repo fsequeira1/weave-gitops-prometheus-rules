@@ -1,0 +1,51 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    app: kube-prometheus-stack
+    release: prometheus
+  name: alertmanager-weave-gitops
+  namespace: flux-system
+spec:
+  groups:
+  - name: alerts.weave-gitops
+    rules:
+      # weave pods unhealthy for 15m
+    - alert: WeavePodsNotHealthy15m
+      expr: min_over_time(sum by (namespace, pod) (kube_pod_status_phase{phase=~"Pending|Unknown|Failed", pod=~"weave-.*"})[15m:1m]) > 0
+      for: 0m
+      labels:
+        severity: critical
+      annotations:
+        summary: Weave gitops pod not healthy (instance {{ $labels.instance }})
+        description: "Pod has been in a non-ready state for longer than 15 minutes.\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+
+    - alert: WeavePodCrashLooping
+      expr: increase(kube_pod_container_status_restarts_total{pod=~"weave.*"}[1m]) > 3
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: Weave gitops pod crash looping (instance {{ $labels.instance }})
+        description: "Pod {{ $labels.pod }} is crash looping\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+
+    # memory usage
+    - alert: WeaveContainersMemoryUsage
+      expr: (sum(container_memory_working_set_bytes{name!="",pod=~"weave-.*"}) BY (pod, container) / sum(container_spec_memory_limit_bytes > 0) BY (pod, container) * 100) > 80
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: Weave Container Memory usage (instance {{ $labels.pod }})
+        description: "Container Memory usage is above 80%\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+
+
+    - alert: WeaveContainersMemoryUsageAbove1GB
+      expr: container_memory_working_set_bytes{image!="",container!="",pod=~"weave-.*"} / 1000000 > 1000
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: Weave's Container Memory usage above 1GB (instance {{ $labels.pod }})
+        description: "Container Memory usage is above 1GB\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+
