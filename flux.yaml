@@ -119,3 +119,21 @@ spec:
       expr: gotk_reconcile_condition{namespace=~"flux-system",exported_namespace=~"flux-system",type!="Ready",status="False",kind=~"Kustomization|HelmRelease"}
       labels:
         severity: warning
+
+    - alert: FluxPodsNotHealthy15m
+      expr: min_over_time(sum by (namespace, pod) (kube_pod_status_phase{phase=~"Pending|Unknown|Failed", pod=~"source-.*|helm-.*|kustomize-.*|notification-.*|image-.*"})[15m:1m]) > 0
+      for: 0m
+      labels:
+        severity: critical
+      annotations:
+        summary: Flux pod not healthy (instance {{ $labels.instance }})
+        description: "Pod has been in a non-ready state for longer than 15 minutes.\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+
+    - alert: FluxPodCrashLooping
+      expr: increase(kube_pod_container_status_restarts_total{pod=~"source-.*|helm-.*|kustomize-.*|notification-.*|image-.*"}[1m]) > 3
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: Flux pod crash looping (instance {{ $labels.instance }})
+        description: "Pod {{ $labels.pod }} is crash looping\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
